@@ -1,6 +1,7 @@
 const express = require('express')
 const morgan = require('morgan')
 const cors = require('cors')
+const Person = require('./models/person')
 const bodyParser = require('body-parser')
 const app = express()
 
@@ -11,83 +12,81 @@ app.use(cors())
 
 morgan.token('body', (req) => { return JSON.stringify(req.body)})
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
-let persons = [
-  {
-    id: 1,
-    name: 'name1',
-    number: '150123456789'
-  },
-  {
-    id: 2,
-    name: 'name2',
-    number: '250123456789'
-  },
-  {
-    id: 3,
-    name: 'name3',
-    number: '350123456789'
-  },
-]
 
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError' && error.kind == 'ObjectId') {
+    return response.status(400).send({ error: 'malformatted id' })
+  }
+
+  next(error)
+}
+
+app.use(errorHandler)
 app.use(bodyParser.json())
 
 const generateId = () => {
   return Math.floor(Math.random() * Math.floor(100000000000));
 }
 
+
+
 app.get('/', (req, res) => {
   res.send('<h1>Hello World!</h1>')
 })
 
 app.get('/api/persons', (req, res) => {
-  res.json(persons)
+  Person.find({}).then(persons => {
+    res.json(persons.map(person => person.toJSON()))
+  })
 })
 
 app.get('/info/', (req, res) => {
-  const length = persons.length
   const date = new Date()
   res.set({ 'content-type': 'application/json; charset=utf-8' });
-  res.end(`puhelinluettelossa on ${length} henkilön tiedot\n${date}`)
+  Person.find({}).then(persons => { persons
+    res.end(`puhelinluettelossa on ${persons.length} henkilön tiedot\n${date}`)
+  })
 })
 
 app.get('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id)
-  const person = persons.find(person => person.id === id)
-
-  if (person) {
-    response.json(person)
-  } else {
-    response.status(404).end()
-  }
+  Person.findById(request.params.id).then(person => {
+   if (person) {
+       response.json(person.toJSON())
+   } else {
+       response.status(404).end()
+   }
+    })
+    .catch(error => next(error))
 })
+
 
 app.delete('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id)
-  persons = persons.filter(person => person.id !== id)
-
-  response.status(204).end()
+  Person.findByIdAndRemove(request.params.id)
+  .then(result => {
+    response.status(204).end()
+  })
+  .catch(error => next(error))
 })
 
-app.post('/api/persons', (req, res) => {
-  const body = req.body
-  if (body.name === undefined || body.number == undefined) {
-    return res.status(400).json({ error: 'name or number missing' })
-  }
-  var names = persons.map(person => person.name)
-  if (names.indexOf(body.name) != -1) {
-    return res.status(400).json({ error: 'name must be unique' })
-  }
+app.post('/api/persons', (request, response) => {
+    const body = request.body
 
-  const person = {
-    name: body.name,
-    number: body.number,
-    id: generateId(),
-  }
+    if (body.name === undefined || body.number === undefined) {
+      return response.status(400).json({ error: 'content missing' })
+    }
 
-  persons = persons.concat(person)
+    const person = new Person({
+      name: body.name,
+      number: body.number,
+    })
 
-  res.json(person)
-})
+    person.save().then(savedPerson => {
+      response.json(savedPerson.toJSON())
+    })
+  })
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
