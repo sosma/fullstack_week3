@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 
-const url = 'mongodb+srv://new-user_77:moi123@sosma0-dapp3.mongodb.net/test?retryWrites=true'
+const url = process.env.MONGODB_URI
 console.log('commecting to', url)
 mongoose.connect(url, { useNewUrlParser: true })
   .then(result => {
